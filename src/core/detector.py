@@ -7,13 +7,23 @@ class EnvironmentDetector:
         return platform.system()
 
     def detect_shell(self) -> str:
-        # Simplified shell detection
+        # Check for SHELL environment variable first
+        shell_env = os.environ.get('SHELL')
+        if shell_env:
+            return os.path.basename(shell_env)
+            
         if platform.system() == "Windows":
             return "powershell"
         return "bash"
 
     def scan_tools(self) -> dict:
-        tools = ["python", "git", "docker", "node", "npm"]
+        # Expanded list of common development tools
+        tools = [
+            "python", "git", "docker", "node", "npm",
+            "gcc", "g++", "make", "cmake",
+            "go", "rustc", "cargo",
+            "java", "javac", "mvn", "gradle"
+        ]
         found_tools = {}
         for tool in tools:
             path = shutil.which(tool)
