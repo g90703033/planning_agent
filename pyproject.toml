@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "open-world-agent"
+version = "0.1.0"
+description = "An open-world LLM agent capable of planning, executing, and learning."
+authors = ["Antigravity <antigravity@deepmind.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^2.0"
+# We will add more dependencies as needed (e.g., for LLM provider)
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+black = "^23.0"
+isort = "^5.0"
+mypy = "^1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
