@@ -59,5 +59,15 @@ class LLM:
             return json.dumps([
                 {"type": "write_file", "filename": "fib.py", "content": "def fib(n):\n    if n <= 1: return n\n    return fib(n-1) + fib(n-2)\n\nprint(fib(10))"}
             ])
+        if "verify" in prompt.lower():
+            return json.dumps([
+                {"type": "write_file", "filename": "verification_test.txt", "content": "PASSED"},
+                {"type": "verify", "command": "type verification_test.txt"}
+            ])
+        if "ask" in prompt.lower():
+            return json.dumps([
+                {"type": "ask_user", "question": "What is your favorite color?"},
+                {"type": "command", "command": "echo 'User said their favorite color is...'"} 
+            ])
         return "Mock LLM Response"
 

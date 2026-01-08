@@ -14,11 +14,12 @@ class Coordinator:
         self.executor = Executor()
         self.reflector = Reflector(self.memory)
 
-    def run(self, task: str):
+    def run(self, task: str, workspace_path: str = None) -> str:
         print(f"Starting task: {task}")
         
-        # 0. Create Workspace
-        workspace_path = self._create_workspace(task)
+        # 0. Create or Reuse Workspace
+        if not workspace_path:
+            workspace_path = self._create_workspace(task)
         print(f"Workspace: {workspace_path}")
         
         # 1. Detect Environment
@@ -26,42 +27,67 @@ class Coordinator:
             "os": self.detector.detect_os(),
             "shell": self.detector.detect_shell(),
             "tools": self.detector.scan_tools(),
-            "files": self._list_files(workspace_path),
+            "files": self._generate_tree_view(workspace_path),
             "cwd": workspace_path
         }
         print(f"Environment: {env_info}")
 
-        # 2. Plan
-        plan = self.planner.create_plan(task, env_info)
-        print(f"Plan: {plan}")
+        # 2. Plan & Execute Loop
+        max_retries = 50
+        attempt = 0
+        feedback = None
+        
+        while attempt < max_retries:
+            attempt += 1
+            print(f"--- Attempt {attempt}/{max_retries} ---")
+            
+            # Plan
+            plan = self.planner.create_plan(task, env_info, feedback)
+            print(f"Plan: {plan}")
 
-        # 3. Execute
-        execution_trace = {
-            "task": task,
-            "plan": plan,
-            "steps": [],
-            "workspace": workspace_path
-        }
-        
-        success = True
-        for step in plan:
-            result = self.executor.execute_step(step, cwd=workspace_path)
-            execution_trace["steps"].append({
-                "step": step,
-                "result": result
-            })
-            if result["status"] != "success":
-                success = False
-                print(f"Step failed: {result}")
+            # Execute
+            execution_trace = {
+                "task": task,
+                "plan": plan,
+                "steps": [],
+                "workspace": workspace_path
+            }
+            
+            success = True
+            error_message = ""
+            
+            for step in plan:
+                result = self.executor.execute_step(step, cwd=workspace_path)
+                execution_trace["steps"].append({
+                    "step": step,
+                    "result": result
+                })
+                
+                if result["status"] != "success":
+                    success = False
+                    # Capture error for feedback
+                    error_message = result.get("stderr") or result.get("error") or result.get("reason") or "Unknown error"
+                    
+                    if step.get("type") == "verify":
+                        print(f"❌ VERIFICATION FAILED: {error_message}")
+                    else:
+                        print(f"Step failed: {result}")
+                    break
+            
+            execution_trace["status"] = "success" if success else "failure"
+            self.memory.add_trace(execution_trace)
+            
+            if success:
+                print("Task completed successfully.")
                 break
-        
-        execution_trace["status"] = "success" if success else "failure"
+            else:
+                feedback = f"Execution failed at step: {step}. Error: {error_message}"
+                print(f"Attempt failed. Retrying with feedback: {feedback}")
 
         # 4. Reflect
         self.reflector.reflect(execution_trace)
-        self.memory.add_trace(execution_trace)
         
-        print("Task completed.")
+        return workspace_path
 
     def _create_workspace(self, task: str) -> str:
         import datetime
@@ -84,14 +110,25 @@ class Coordinator:
             
         return workspace_path
 
-    def _list_files(self, directory):
+    def _generate_tree_view(self, directory: str, prefix: str = "") -> str:
         import os
-        files = []
         if not os.path.exists(directory):
-            return []
-        for root, _, filenames in os.walk(directory):
-            for filename in filenames:
-                if ".git" not in root:
-                    files.append(os.path.join(root, filename))
-        return files[:20] # Limit to 20 files for context
+            return ""
+            
+        tree_str = ""
+        items = sorted(os.listdir(directory))
+        items = [i for i in items if i not in [".git", "__pycache__", ".venv", ".env"]]
+        
+        for i, item in enumerate(items):
+            path = os.path.join(directory, item)
+            is_last = (i == len(items) - 1)
+            
+            connector = "└── " if is_last else "├── "
+            tree_str += f"{prefix}{connector}{item}\n"
+            
+            if os.path.isdir(path):
+                extension = "    " if is_last else "│   "
+                tree_str += self._generate_tree_view(path, prefix + extension)
+                
+        return tree_str
 
